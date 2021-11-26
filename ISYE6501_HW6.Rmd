@@ -1,0 +1,110 @@
+---
+title: "ISYE_6501_HW6"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Question 9.1 
+Using the same crime data set uscrime.txt as in Question 8.2, apply Principal Component Analysis and then create a regression model using the first few principal components. Specify your new model in terms of the original variables (not the principal components), and compare its quality to that of your solution to Question 8.2.  You can use the R function prcomp for PCA. (Note that to first scale the data, you can include scale. = TRUE to scale as part of the PCA function. Don’t forget that, to make a prediction for the new city, you’ll need to unscale the coefficients (i.e., do the scaling calculation in reverse)!) 
+
+```{r}
+uscrime <- read.delim("~/Documents/ISYE 6501/hw5-Fall 21/uscrime.txt", header=TRUE)
+
+library(GGally)
+library(corrplot)
+```
+
+## EDA
+```{r}
+uscrime.cor = cor(uscrime)
+corrplot(uscrime.cor, method = "number", type = "full")
+```
+We can see that we have significant multicollinarity especially with Po1 and Po2, which makes this data set a good candiddate for PCA.
+
+## PCA
+```{r}
+pca <- prcomp(uscrime[,1:15], scale = TRUE)
+summary(pca)
+```
+```{r}
+screeplot(pca, type = "lines", col = "red")
+```
+It looks like there is an elbow at both 4 and 6, suggesting somewhere between 4 and 6 principal components would be suitable for use in the model.
+
+```{r}
+proportion <- c(summary(pca)$importance[2,])
+
+print("Percent of variance explained by PC 1-4")
+sum(proportion[1:4])
+print("Percent of variance explained by PC 1-5")
+sum(proportion[1:5])
+print("Percent of variance explained by PC 1-6")
+sum(proportion[1:6])
+```
+We will select 6 principal components for the model since this explains nearly 90% of the variance in the data and represents an elbow on the scree plot.
+
+
+## Linear Model with Principal Components 1-6
+```{r}
+#selecting components 1-6
+select_comps <- pca$x[,1:6]
+
+#new data frame with principal components and response data
+new_df <- data.frame(cbind(select_comps, uscrime[,16]))
+
+#liner model with selected components
+model <- lm(V7~., data = new_df) 
+summary(model)
+```
+
+
+# Reversing PCA
+```{r}
+coefs <- data.frame(model$coefficients[2:7] %*% t(pca$rotation[,1:6]))
+
+coefs
+```
+
+## Prediction with Test Data Point
+```{r}
+#creating test point for predicted values
+test_point <- data.frame(M = 14.0,So = 0,Ed = 10.0, Po1 = 12.0,Po2 = 15.5,
+                         LF = 0.640, M.F = 94.0,Pop = 150,NW = 1.1,U1 = 0.120,
+                         U2 = 3.6, Wealth = 3200,Ineq = 20.1,Prob = 0.04, Time = 39.0)
+
+#multiplying all of the transformed coefficients by the test poitn data
+intercept <- as.numeric(model$coefficients[1])
+
+predicted_value <- intercept +(coefs$M * test_point$M)+
+          (coefs$So * test_point$So)+
+          (coefs$Ed * test_point$Ed)+
+          (coefs$Po1 * test_point$Po1)+
+          (coefs$Po2 * test_point$Po2)+
+          (coefs$LF * test_point$LF)+
+          (coefs$M.F * test_point$M.F)+
+          (coefs$Pop * test_point$Pop)+
+          (coefs$NW * test_point$NW)+
+          (coefs$U1 * test_point$U1)+
+          (coefs$U2 * test_point$U2)+
+          (coefs$Wealth * test_point$Wealth)+
+          (coefs$Ineq * test_point$Ineq)+
+          (coefs$Prob * test_point$Prob)+
+          (coefs$Time * test_point$Time)
+          
+print('Model test point prediction')         
+predicted_value
+```
+
+##Rotating the data
+
+```{r}
+pca$rotation[,1:4]
+alphas <- pca$rotation[,1:4] %*% betas
+t(alphas)
+```
+
