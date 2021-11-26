@@ -1,0 +1,122 @@
+---
+title: "ISYE 6501 HW 1"
+output:
+  pdf_document: default
+  html_notebook: default
+---
+
+Last Modified 09/01/21
+
+**Question 2.2**
+
+Credit Card Data
+```{r}
+library(rmarkdown)
+
+cc_data <- read.delim("~/Documents/R/data 2.2/credit_card_data.txt", #creating df
+                      stringsAsFactors = FALSE, 
+                      header=FALSE) 
+data <- as.matrix(cc_data) #creating matrix
+```
+
+**Question 2.2.1**
+
+Creating SVM model and calculating coefficients and intercept:
+```{r}
+library(kernlab)
+
+set.seed(2) 
+
+C = c(.001, 1, 100, 10000) #Values of C to be tested
+accurracy = rep(0,4) #empty vector for accuracy values
+
+# call ksvm in a loop to test several value of C.  Vanilladot is a simple linear kernel.  
+for (i in C){
+model <- ksvm(data[,1:10],
+              data[,11],
+              type='C-svc',
+              kernel='vanilladot',
+              C=i,
+              scaled=TRUE)
+pred <- predict(model,data[,1:10])
+print(paste("Percent of model's prediction match actual value for C=", 
+            i,
+            "is", 
+            sum(pred == data[,11]) / nrow(data)))
+}
+```
+1 is selected as the best value for C with an accuracy of approximately 86%.
+
+```{r}
+#model with C=1
+model <- ksvm(data[,1:10],
+              data[,11],
+              type='C-svc',
+              kernel='vanilladot',
+              C=1,scaled=TRUE)
+
+# calculate a1…am
+a <- colSums(model@xmatrix[[1]] * model@coef[[1]])
+a
+
+# calculate a0
+a0 <- -model@b
+a0
+```
+The kvsm classifier produces the following model:
+
+$(.08148382 -0.0011026642 V1 - 0.0008980539 V2 - 0.0016074557 V3 + 0.0029041700 V4 + 1.0047363456 V5$ 
+$- 0.0029852110 V6 - 0.0002035179 V7 - 0.0005504803 V8 - 0.0012519187 V9 + 0.1064404601 V10 + 0.08148382)1 = 0$
+
+**Question 2.2.1 CONCLUSION** 
+
+A ksvm classifier model trained on this data accurately predicts the value of the response variable for approximately 86% of the data points when we set a value of C = 1 and when C=100. 86% is the highest level of accuracy achieved in tests of different value of C. Lower values of C represent a wider margin of classification and higher values represent a more narrow margin. So it seems that 1 is a better choice than 100 since the margin for classifying points will be wider with the same classification accuracy.
+
+**Question 2.2.3**
+
+Creating a function that will iterate through all rows of the dataframe, for each, producing a k-Nearest-Neighbor model and returning it's accuracy using the Leave-one-out Cross Validation (LOOCV) method:
+
+```{r}
+library(kknn)
+
+set.seed(2)
+
+loocv <- function(x){ 
+  predicted <- rep(0,(nrow(cc_data))) #establishing an empty vector
+  for (i in 1:nrow(cc_data)){
+  model_kknn <- kknn(V11~.,
+                  train = cc_data[-i,],
+                  test = cc_data[i,],
+                  k = x,
+                  distance = 2,
+                  kernel = "optimal",
+                  scale = TRUE)
+  predicted[i] <- as.integer(fitted(model_kknn)+0.5)
+}
+  acc = sum(predicted == cc_data[,11]) / nrow(cc_data)
+  return(acc)
+}
+```
+
+Calling the function and applying it to the dataframe:
+```{r}
+accurracy=rep(0,25) #establishing an empty vector
+
+for (i in 1:25){
+  accurracy[i] = loocv(i)
+}
+```
+
+Accuracy vs. K-Values:
+```{r}
+k_values <- c(1:25)
+
+df <- data.frame(k_values, accurracy)
+
+which.max(df[,2]) # find k-value with greatest accuracy value.
+
+plot(df)
+```
+**Question 2.2.3 CONCLUSION** 
+
+The LOOCV loop above creates a vector containing accuracy values for each value of k from 1-25.  The k-value with the highest accuracy is 12 as can be seen above.  This means that the k-Nearest-Neighbors model with the highest accuracy is one that classifies data points into clusters of 12 points nearest the centroid.
