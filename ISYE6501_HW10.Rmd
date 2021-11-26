@@ -1,0 +1,345 @@
+---
+title: "ISYE6501_HW10"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Question 14.1
+
+The breast cancer data set breast-cancer-wisconsin.data.txt from http://archive.ics.uci.edu/ml/machine-learning-databases/breast-cancer-wisconsin/  (description at http://archive.ics.uci.edu/ml/datasets/Breast+Cancer+Wisconsin+%28Original%29 ) has missing values.
+
+
+```{r}
+data <- read.csv("~/Documents/ISYE6501/breast-cancer-wisconsin.data", header=FALSE)
+```
+Attribute Information:
+
+1. Sample code number: id number
+2. Clump Thickness: 1 - 10
+3. Uniformity of Cell Size: 1 - 10
+4. Uniformity of Cell Shape: 1 - 10
+5. Marginal Adhesion: 1 - 10
+6. Single Epithelial Cell Size: 1 - 10
+7. Bare Nuclei: 1 - 10
+8. Bland Chromatin: 1 - 10
+9. Normal Nucleoli: 1 - 10
+10. Mitoses: 1 - 10
+11. Class: (2 for benign, 4 for malignant)
+
+Adding column names to data set for clarity:
+```{r}
+colnames(data) <- c("ID", 
+                    "Clump_Thickness", 
+                    "Size", 
+                    "Shape",
+                    "Marginal Adhesion",
+                    "Single_Epith_Cell_Size", 
+                    "Bare_Nuclei",
+                    "Bland_Chromatin",
+                    "Normal_Nucleoli", 
+                    "Mitoses", 
+                    "Class")
+
+data$Class[data$Class == 2] <- 0 #Benign
+data$Class[data$Class == 4] <- 1 #Malignant
+
+```
+
+```{r}
+summary(data)
+```
+'Bare Nuclei' contains values as character because some values are '?'
+```{r}
+library(dplyr)
+```
+
+```{r}
+data %>% count(data$Bare_Nuclei =="?")
+#16 missing values found out of 699 total observations
+
+to_impute <- which(data$Bare_Nuclei=="?")
+
+length(to_impute)/nrow(data)
+#only approximately 2% missing values
+```
+
+```{r}
+hist(data$Class[to_impute], breaks = 2, main = "'Class' distribution for Obs w/ Missing Values")
+
+hist(data$Class[-to_impute], breaks = 2, main = "'Class' distribution for Complete Obs")
+```
+The 16 observations with missing values for 'Bar Nuclei' appear to have a distribution of the 'Class' variable that is different from the rest of the data set suggesting it is possible we are introducing bias by imputing values for these observations, but likely within tolerable limits since the difference between the two groups of data points is not huge.
+```{r}
+data_missing  <- data[to_impute,]
+data_not_missing <- data[-to_impute,]
+
+data_not_missing$Bare_Nuclei <- as.numeric(data_not_missing$Bare_Nuclei)
+```
+
+1.	Use the mean/mode imputation method to impute values for the missing data.
+```{r}
+#calculating mean
+Bare_nuclei_mean <- mean(data_not_missing$Bare_Nuclei[-to_impute])
+
+Bare_nuclei_mean
+
+#new df with imputed values (mean)
+data_mean <- data
+data_mean$Bare_Nuclei[to_impute] <- Bare_nuclei_mean
+
+data_mean$Bare_Nuclei <- as.numeric(data_mean$Bare_Nuclei)
+```
+
+2.	Use regression to impute values for the missing data.
+
+```{r}
+#linear model with Bare_Nuclei as the response variable 
+#omitting Class so as not to introduce bias and for usability
+#omitting ID since it is irrelevant
+model <- lm(Bare_Nuclei~.-ID -Class, 
+            data = data_not_missing)
+summary(model)
+
+#predict regression imputed values
+reg_val <- predict(model, data_missing)
+reg_val
+
+#new df with regression imputed values
+data_reg <- data
+data_reg$Bare_Nuclei[to_impute] <- reg_val
+
+data_reg$Bare_Nuclei <- as.numeric(data_reg$Bare_Nuclei)
+```
+
+3.	Use regression with perturbation to impute values for the missing data.
+```{r}
+#determining mean and std of clean observations to use for perturbation
+m <- mean(data_not_missing$Bare_Nuclei)
+s <- sd(data_not_missing$Bare_Nuclei)
+
+set.seed(2)
+perturb <- rnorm(length(to_impute), m, s)
+
+#creating values with perturbation
+pert_val <- round(reg_val + perturb)
+
+pert_val
+```
+Above are the values imputed by regressing all relevant variables on Bare_nuclei.  Some are outside of the range 1-10 and will need to be rounded.
+
+```{r}
+#adding values to new df
+data_pert <- data
+  
+data_pert$Bare_Nuclei[to_impute] <- pert_val
+
+data_pert$Bare_Nuclei <- as.numeric(data_pert$Bare_Nuclei)
+```
+
+
+```{r}
+#round up or down to keep values in range of 1 to 10
+for(i in 1:nrow(data_pert))
+  {
+  if (data_pert$Bare_Nuclei[i] > 10){data_pert$Bare_Nuclei[i] <- 10}
+  if (data_pert$Bare_Nuclei[i] < 1){data_pert$Bare_Nuclei[i] <- 1}
+}
+```
+
+4.	(Optional) Compare the results and quality of classification models (e.g., SVM, KNN) build using 
+(1) the data sets from questions 1,2,3; 
+```{r}
+library(caret)
+
+#Test and train split:
+set.seed(2)
+trainIndex <- createDataPartition(data_mean$Class, p = .8, 
+                                  list = FALSE, 
+                                  times = 1)
+train_mean <- data_mean[ trainIndex,]
+test_mean  <- data_mean[-trainIndex,]
+```
+
+###1. KNN model with MEAN IMPUTATION for missing values
+```{r}
+library(kknn)
+
+set.seed(2)
+
+fit_mean <- kknn(Class~.-ID,
+                  train = train_mean,
+                  test = test_mean,
+                  k = 5,
+                  distance = 2,
+                  kernel = "optimal",
+                  scale = TRUE)
+
+mean_predicted <- as.integer(fitted.values(fit_mean)+.5)
+
+mean_accuracy <- sum(mean_predicted == test_mean[,11]) / nrow(test_mean)
+
+print(mean_accuracy)
+
+conf_matrix <- as.matrix(table(mean_predicted, test_mean$Class))
+conf_matrix
+```
+###2. KNN model with REGRESSION IMPUTATION for missing values
+```{r}
+#Test and train split:
+set.seed(2)
+trainIndex <- createDataPartition(data_reg$Class, p = .8, 
+                                  list = FALSE, 
+                                  times = 1)
+train_reg <- data_reg[ trainIndex,]
+test_reg  <- data_reg[-trainIndex,]
+```
+
+```{r}
+fit_reg <- kknn(Class~.-ID,
+                  train = train_reg,
+                  test = test_reg,
+                  k = 5,
+                  distance = 2,
+                  kernel = "optimal",
+                  scale = TRUE)
+
+reg_predicted <- as.integer(fitted.values(fit_reg)+.5)
+
+reg_accuracy <- sum(reg_predicted == test_reg[,11]) / nrow(test_reg)
+
+print(reg_accuracy)
+
+conf_matrix <- as.matrix(table(reg_predicted, test_reg$Class))
+conf_matrix
+```
+
+###3. KNN model with REGRESSION IMPUTATION WITH PERTURBATION for missing values
+```{r}
+#Test and train split:
+set.seed(2)
+trainIndex <- createDataPartition(data_pert$Class, p = .8, 
+                                  list = FALSE, 
+                                  times = 1)
+train_pert <- data_pert[ trainIndex,]
+test_pert <- data_pert[-trainIndex,]
+```
+
+```{r}
+fit_pert <- kknn(Class~.-ID,
+                  train = train_pert,
+                  test = test_pert,
+                  k = 5,
+                  distance = 2,
+                  kernel = "optimal",
+                  scale = TRUE)
+
+pert_predicted <- as.integer(fitted.values(fit_pert)+.5)
+
+pert_accuracy <- sum(pert_predicted == test_pert[,11]) / nrow(test_pert)
+
+print(pert_accuracy)
+
+conf_matrix <- as.matrix(table(pert_predicted, test_pert$Class))
+conf_matrix
+```
+(2) the data that remains after data points with missing values are removed; and 
+
+```{r}
+#Test and train split:
+set.seed(2)
+trainIndex <- createDataPartition(data_not_missing$Class, p = .8, 
+                                  list = FALSE, 
+                                  times = 1)
+train_nm <- data_not_missing[ trainIndex,]
+test_nm <- data_not_missing[-trainIndex,]
+```
+
+```{r}
+fit_nm <- kknn(Class~.-ID,
+                  train = train_nm,
+                  test = test_nm,
+                  k = 5,
+                  distance = 2,
+                  kernel = "optimal",
+                  scale = TRUE)
+
+nm_predicted <- as.integer(fitted.values(fit_nm)+.5)
+
+nm_accuracy <- sum(nm_predicted == test_nm[,11]) / nrow(test_nm)
+
+print(nm_accuracy)
+
+conf_matrix <- as.matrix(table(nm_predicted, test_nm$Class))
+conf_matrix
+```
+
+(3) the data set when a binary variable is introduced to indicate missing values.
+```{r}
+#new df with binary variable
+data_binary <- data
+
+data_binary$no_bare_nuclei <- 0
+
+data_binary$no_bare_nuclei[to_impute] <- 1 #creates new variable =1 if missing value
+
+data_binary$Bare_Nuclei <- as.numeric(data_binary$Bare_Nuclei)
+```
+
+```{r}
+#Test and train split:
+set.seed(2)
+trainIndex <- createDataPartition(data_binary$Class, p = .8, 
+                                  list = FALSE, 
+                                  times = 1)
+train_bin <- data_binary[ trainIndex,]
+test_bin <- data_binary[-trainIndex,]
+```
+
+```{r}
+fit_bin <- kknn(Class~.-ID,
+                  train = train_bin,
+                  test = test_bin,
+                  k = 5,
+                  distance = 2,
+                  kernel = "optimal",
+                  scale = TRUE)
+
+bin_predicted <- as.integer(fitted.values(fit_bin)+.5)
+
+bin_accuracy <- sum(bin_predicted == test_bin[,11]) / nrow(test_bin)
+
+print(bin_accuracy)
+```
+## Question 14.1 CONCLUSION: 
+```{r}
+acc_table <- data.frame(Imputation_Method = c("Mean", 
+                                "Regression", 
+                                "Regression with Perturbation", 
+                                "Omit Missing Values",
+                                "Binary Variable for Obs w/ Missing Values"),
+                      KNN_Model_Accuracy = c(mean_accuracy,
+                                             reg_accuracy, 
+                                             pert_accuracy,
+                                             nm_accuracy,
+                                             bin_accuracy))
+acc_table
+```
+Imputation of missing values for 'Bare Nuclei' by mean and by regression provide extremely high accuracy, when used to train and test a knn model. 'Class' was removed from the regression used to predict missing values in order to avoid over fitting. However, this method produced such stunningly high accuracy, over fitting is likely. More data exploration is needed. Regression with perturbation perhaps corrects for some over fitting but still produces a model with very high accuracy, identifying 'Class' accurately 94.8% of the time. Simply omitting missing variables produces a similarly accurate model.
+
+Inclusion of a binary variable for missing values performed worst with just 64.7% accuracy.
+
+## Question 15.1  
+  
+Describe a situation or problem from your job, everyday life, current events, etc., for which optimization 
+would be appropriate. What data would you need?   
+
+An optimization function could be used to determine the best approach to reducing a firm's carbon emissions over a particular period. If a company has finite resources to undertake carbon emission reductions and has multiple streams of carbon into the atmosphere, an optimization model can help decide what actions to take.
+
+The constraint would be the capital the company has budgeted for the carbon emission reduction project.
+
+The objective would be to minimize the combined warming effect of emitted carbon compounds on climate. 
+
+The decision variables are the types of carbon emitted (for example, the warming effect of methane is 80 times greater than carbon dioxide, but dissipates much faster form the atmosphere). These effective emissions and their relative cost rate for reduction would make up the decision variables in this optimization function.
