@@ -1,0 +1,55 @@
+---
+title: "ISYE6501_HW9"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Question 12.2
+
+To determine the value of 10 different yes/no features to the market value of a house (large yard, solar roof, etc.), a real estate agent plans to survey 50 potential buyers, showing a fictitious house with different combinations of features.  To reduce the survey size, the agent wants to show just 16 fictitious houses. Use R’s FrF2 function (in the FrF2 package) to find a fractional factorial design for this experiment: what set of features should each of the 16 fictitious houses have?  Note: the output of FrF2 is “1” (include) or  “-1” (don’t include) for each feature.
+
+```{r}
+library(FrF2)
+```
+```{r}
+set.seed(2)
+
+fact_design <- FrF2(16, 10,
+                    factor.names = c('Large Yard',
+                                     'Pool', 
+                                     'Barrel Tile', 
+                                     'Long Driveway', 
+                                     'Multi Car Garage',
+                                     'More than 3 Bedrooms', 
+                                     'Modern Kitchen', 
+                                     'Gated Community', 
+                                     'Gazebo', 
+                                     'HOA'))
+
+fact_design
+```
+The factorial design above shows the 16 fictitious houses that the realtor should include in the survey where 1 signifies the feature should be included in the house and -1 signifies the feature should be omitted.
+
+## For each of the following distributions, give an example of data that you would expect to follow this distribution (besides the examples already discussed in class).
+a.	Binomial:
+
+Survival rates follow a binomial distribution in that the response value for survival, be it infant mortality  or treatment for a particular cancer, is simply 'survive' or not 'survive'.
+
+b.	Geometric:
+
+A geometric distribution could be used for chemotherapy clinical trials where the value of interest is how many treatments are needed to reduce markers for cancer in a patient.  
+
+c.	Poisson:
+
+Emergency room data on number of new patients per hour might follow a Poisson distribution.
+
+d.	Exponential:
+
+The time in between the admission of patients might follow an exponential distribution.
+
+e.	Weibull:
+
+A study of medical device failure aimed at determining the useful lifespan of medical devices, such as a pacemaker or LVAD, might follow a Weibull distribution.
