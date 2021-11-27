@@ -1,0 +1,193 @@
+---
+title: "ISYE6414_HW2"
+output:
+  html_document: default
+  pdf_document: default
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Background
+
+You have been contracted as a healthcare consulting company to understand the factors on which the pricing of health insurance depends. 
+
+## Data Description
+
+The data consists of a data frame with 1338 observations on the following 7 variables:
+
+1. price: Response variable ($)
+2. age: Quantitative variable
+3. sex: Qualitative variable
+4. bmi: Quantitative variable
+5. children: Quantitative variable
+6. smoker: Qualitative variable
+7. region: Qualitative variable
+
+
+## Instructions on reading the data
+
+To read the data in `R`, save the file in your working directory (make sure you have changed the directory if different from the R working directory) and read the data using the `R` function `read.csv()`
+
+```{r}
+insurance <- read.csv("~/Documents/R/insurance.csv")
+```
+
+
+# Question 1: Exploratory Data Analysis [15 points]
+
+a. **4 pts** Create scatterplots of the response, *price*, against three quantitative predictors *age*, *bmi*, and *children*. Describe the general trend (direction and form) of each plot.
+```{r}
+plot(price~age, data=insurance)
+abline(lm(price~age, data=insurance))
+
+plot(price~bmi, data=insurance)
+abline(lm(price~bmi, data=insurance))
+
+plot(price~children, data=insurance)
+abline(lm(price~children, data=insurance))
+```
+
+Age, price, and children are all positively correlated with price.  All three variables seem to have an extremely high residuals from a linear model for to the data. The variability of price seems to increase as BMI increases (ie. the variable of BMI is not constant).
+
+b. **4 pts** What is the value of the correlation coefficient for each of the above pair of response and predictor variables? What does it tell you about your comments in part (a)?
+```{r}
+print("Correlation between age and price")
+cor(insurance$age, insurance$price, method = "pearson")
+
+print("Correlation between BMI and price")
+cor(insurance$bmi, insurance$price, method = "pearson")
+
+print("Correlation between children and price")
+cor(insurance$children, insurance$price, method = "pearson")
+```
+Age, BMI, and number of children are all positively correlated with the price of insurance.  At .299, age has the strongest relationship wth price as compared to BMI and children.  This confirms what can be seen in the scatter plots for each of these variables.  Points on the age vs. price scatter plot are closest to the linear model as compared to the scatter plots for BMI and children.
+
+c. **4 pts** Create box plots of the response, *price*, and the three qualitative predictors *sex*, *smoker*, and *region*. Based on these box plots, does there appear to be a relationship between these qualitative predictors and the response?
+
+*Hint*: Use the given code to convert the qualitative predictors to factors.
+
+```{r}
+#make categorical variables into factors
+insurance$sex<-as.factor(insurance$sex) #makes female the baseline level
+insurance$smoker<-as.factor(insurance$smoker) #makes no the baseline level
+insurance$region<-as.factor(insurance$region) #makes northeast the baseline level
+```
+
+```{r}
+boxplot(price~sex,
+        data=insurance, 
+        main="Insurance pricing",
+        xlab="sex", 
+        ylab="price")
+
+boxplot(price~smoker,
+        data=insurance, 
+        main="Insurance pricing",
+        xlab="smoker", 
+        ylab="price")
+
+boxplot(price~region,
+        data=insurance, 
+        main="Insurance pricing",
+        xlab="region", 
+        ylab="price")
+```
+
+The variability of price is much greater for men than women, but the mean of the two groups does not appear to be different.  The same is true for region. All regions have roughly equivalent means, though the variability in price is a bit higher for the southeast region. The mean price for smokers does appear to be dramatically higher than for non-smokers.  
+
+d. **3 pts** Based on the analysis above, does it make sense to run a multiple linear regression with all of the predictors?
+
+*Note: Please work on non-transformed data for all of the following questions.*
+
+# Question 2: Fitting the Multiple Linear Regression Model [12 points]
+
+Build a multiple linear regression model, named *model1*, using the response, *price*, and all 6 predictors, and then answer the questions that follow:
+
+a. **6 pts** Report the coefficient of determination (R-squared) for the model and give a concise interpretation of this value.
+```{r}
+model1 <- lm(price~., data=insurance)
+summary(model1)
+```
+The r-square value for this model is .7509, meaning that this model explains approximately 75% of the variability in the response variable, price.
+
+b. **6 pts** Is the model of any use in predicting price? Conduct a test of overall adequacy of the model, using $\alpha = 0.05$. Provide the following elements of the test: null hypothesis $H_0$, alternative hypothesis $H_a$, $F$-statistic or $p$-value, and conclusion.
+
+To test the over adequacy of this model we should consider that:
+
+$H_0$ is $\beta_1, \beta_2, \beta_3, \beta_4, \beta_5, \beta_6 = 0$
+
+$H_a$ is $\beta_1\neq0$ or $\beta_2\neq0$ or $\beta_3\neq0$ or $\beta_4\neq0$ or $\beta_5\neq0$ or $\beta_6\neq0$
+
+$F-statistic = 500.8$ with a $p$-value of nearly < 2.2e-16 (as near to 0 as r can measure). Our f-stat is very high with a p-value near zero, so we can reject the null hypothesis and say that there is sufficient evidence for the alternative hypothesis (at a $\alpha$-level of <0.05) that one or more coefficients are a non-zero value.
+
+# Question 3: Model Comparison [14 points]
+
+a. **5 pts** Assuming a marginal relationship between *region* and *price*, perform an ANOVA $F$-test on the mean insurance prices among the different regions. Using an $\alpha$-level of 0.05, can we reject the null hypothesis that the means of the regions are equal? Please interpret.
+```{r}
+anova_model <- aov(price~ region, data= insurance)
+summary(anova_model)
+```
+Since the p-value of the f-test is .0309 at an $\alpha$-level of 0.05, we can conclude that there is a statistically significant difference in the mean of insurance prices for the different regions.
+
+b. **5 pts** Now, build a second multiple linear regression model, called *model2*, using *price* as the response variable, and all variables except *region* as the predictors. Conduct a partial $F$-test comparing *model2* with *model1*. What is the partial-F test p-value? Can we reject the null hypothesis that the regression coefficients for *region* variables are zero at an $\alpha$-level of 0.05?
+```{r}
+model2 <- lm(price~age+ sex+ bmi+ children+ smoker, data=insurance)
+anova(model1, model2)
+```
+Since the p-value of the partial f-test is .09, we cannot reject the null hypothesis at an $\alpha$-level of 0.05.  Therefore, we cannot conclude that given the other variables in this model that region has a non-zero effect on price.
+
+c. **4 pts** What can you conclude from 3a and 3b? Do they provide the exact same results?
+
+The ANOVA model that compares the mean prices of the different regions tells us that there is a statistically significant difference by region.  However, this ANOVA test only describes the effct of region on price alone.  
+
+The partial f-test that compares the two models, tells us that when we consider all of the explanatory variables the effect of region is not statistically significant.  Said another way, the partial f-test of the two models tell us there is not sufficient evidence that the effect of the region variable is non-zero.
+
+*Note: Please use model1 for all of the following questions.*
+
+# Question 4: Coefficient Interpretation [7 points]
+
+a. **3 pts** Interpret the estimated coefficient of *sexmale* in the context of the problem. *Make sure female is the baseline level for sex. Mention any assumptions you make about other predictors clearly when stating the interpretation.*
+
+'Sexmale' is a binary variable where =0 is male and =1 is female.  Although the boxplot in our EDA tells us that the mean price for men is actually higher, the coefficient in model1 is -131.3.  This tells us that given all the variables present in the model, being male is associated with a marginal decrease in insurance price.  However, with a p-value 0.693348, this relationship is not statistically significant.
+
+b. **4 pts** If the value of the *bmi* in *model1* is increased by 0.01 and the other predictors are kept constant, what change in the response would be expected?
+
+$339.2 * .01 = 3.392$
+
+A .01 increase in BMI would result in a $3.392 increase in insurance price, when other variables in the model are held constant.
+
+# Question 5: Confidence and Prediction Intervals [12 points]
+
+a. **6 pts** Compute 90% and 95% confidence intervals (CIs) for the parameter associated with *age* for *model1*. What observations can you make about the width of these intervals?
+```{r}
+confint(model1, "age", level = .9)
+
+confint(model1, "age", level = .95)
+```
+
+The 95% confidence interval is, of course, wider.  Neither interval includes 0, so we can conclude that age has a non-zero relationship on price in this dataset.
+
+b. **3 pts** Using *model1*, estimate the average price for all insurance policies with the same characteristics as the first data point in the sample. What is the 95% confidence interval? Provide an interpretation of your results.
+```{r}
+x <- insurance[1, 1:6]
+predict(model1, 
+        x, 
+        interval="confidence")
+```
+If we use model1 to predict and insurance price for the first data point, the price would be $25293.71.  
+With 95% confidence, the model predicts, the price will be between $24143.98 
+and $26443.44.  
+
+c. **3 pts** Suppose that the *age* value for the first data point is increased to 50, while all other values are kept fixed. Using *model1*, predict the price of an insurance policy with these characteristics. What is the 95% prediction interval? Provide an interpretation of your results.
+```{r}
+x[1]<- 50
+
+predict(model1, 
+        x, 
+        interval="confidence")
+```
+If we increase the age of this data point to 50.  The insurance price predicted is $33256.26.
+With 95% confidence the insurance price would be between $32157.63 and
+$34354.89.
+
