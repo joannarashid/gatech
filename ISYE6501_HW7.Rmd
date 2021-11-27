@@ -1,0 +1,280 @@
+---
+title: "ISYE_6501_HW7"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Question 10.1 
+
+Using the same crime data set uscrime.txt as in Questions 8.2 and 9.1, find the best model you can using (a) a regression tree model, and  (b) a random forest model. In R, you can use the tree package or the rpart package, and the randomForestpackage.  For each model, describe one or two qualitative takeaways you get from analyzing the results (i.e., don’t just stop when you have a good model, but interpret it too). 
+
+### a. Regression Tree
+```{r}
+library(tree)
+library(randomForest)
+```
+Loading in data:
+```{r}
+uscrime <- read.delim("~/Documents/ISYE 6501/hw5-Fall 21/uscrime.txt", header=TRUE)
+```
+
+```{r}
+crime_tree <- tree(Crime~., data = uscrime)
+summary(crime_tree)
+```
+Calculating $R^2$ for this baseline regression tree:
+```{r}
+tree_pred <- predict(crime_tree, data = uscrime[,1:15])
+resid_ss <- sum((tree_pred - uscrime[,16])^2)
+tot_ss <- sum((uscrime[,16] - mean(uscrime[,16]))^2)
+1 - resid_ss/tot_ss
+```
+Plotting initial tree:
+```{r}
+plot(crime_tree)
+text(crime_tree)
+title("US Crime Rates - Initial Classification Tree")
+```
+```{r}
+crime_tree$frame
+```
+Plotting the predicted vs. actual:
+```{r}
+yhat_tree <- predict(crime_tree)
+plot(yhat_tree, uscrime$Crime)
+title("US Crime Rates - Predicted vs. Actual")
+```
+<br />
+**Initial Model Analysis: This initial tree model has a reasonably high r-squared of .72 and a residual mean deviance of 47390. However, we can see that in each terminal node, there are as few as 5 and at most 11 observations, which means  over-fitting is very likely. For this reason, pruning is necessary.**
+
+Creating pruned model with 4 terminal nodes:
+```{r}
+crime_tree_pruned <- prune.tree(crime_tree, best = 4)
+summary(crime_tree_pruned)
+```
+Calculating $R^2$ for pruned regression tree:
+```{r}
+pruned_pred <- predict(crime_tree_pruned, data = uscrime[,1:15])
+resid_ss <- sum((pruned_pred - uscrime[,16])^2)
+tot_ss <- sum((uscrime[,16] - mean(uscrime[,16]))^2)
+1 - resid_ss/tot_ss
+```
+Plotting the pruned tree:
+```{r}
+plot(crime_tree_pruned)
+text(crime_tree_pruned)
+title("US Crime Rates - Pruned Classification Tree")
+```
+
+```{r}
+crime_tree_pruned$frame
+```
+
+```{r}
+yhat_pruned <- predict(crime_tree_pruned)
+plot(yhat_pruned, uscrime$Crime)
+title("US Crime Rates -Pruned - Predicted vs. Actual")
+```
+<br/>
+**Pruned Model Analysis: When we prune the model to just 4 terminal nodes, we see that the r-squared value is actually worse, .61, and the residual mean deviance is higher, 61220. So when the problem of over-fitting is addressed, the model actually proves to be much worse.**
+
+Cross Validation of both trees:
+```{r}
+set.seed(2)
+
+cv_tree <- cv.tree(crime_tree)
+cv_pruned <- cv.tree(crime_tree_pruned)
+
+summary(cv_tree)
+summary(cv_pruned)
+```
+
+```{r}
+plot(cv_tree)
+title(sub ="Cross validation of intial model (Mean Deviation vs. Num. of Trees)")
+
+plot(cv_pruned)
+title(sub ="Cross validation of pruned model (Mean Deviation vs. Num. of Trees)")
+```
+
+**10.1.a CONCLUSION: These tree models are not good for prediction as we can see from the predicted vs. actual plots. The initial model is over-fit and the pruned model is not very accurate. While not particularly good models, these regression trees do help illustrate variable importance. In both tree models, Po1 and NW are the most important variables, suggesting they would be most important to include in other types of regression analysis. Cross Validation shows us that deviance from the mean residual is minimized by limiting the regression tree to 3 or 4 terminal nodes. Ultimately, a regression tree is not a great model for a data set with so few observations. The small data set also made test/train splitting not practical which is why it was not performed, instead opting for cross-validation. However, the small number of observations made the cross validation less meaningful as well.**
+
+### b. Random Forest Model
+
+Initial random forest model (mtry = 4 based on findings of above tree models):
+```{r}
+set.seed(2)
+
+crime_forest <- randomForest(Crime~., 
+                             data = uscrime,
+                             importance = TRUE)
+crime_forest
+```
+
+```{r}
+plot(crime_forest$rsq)
+title("R-squared by Number of Trees Computed")
+```
+
+```{r}
+importance(crime_forest)
+```
+
+
+```{r}
+varImpPlot(crime_forest)
+```
+
+Looping through all values of mtry:
+```{r}
+set.seed(2)
+
+oob_error <- double(16)
+r_squared <- double(16)
+
+for (i in 1:16){
+  rf = randomForest(Crime~.,
+                    data = uscrime,
+                    mtry = i,
+                    importance = TRUE,
+                    ntree = 500)
+  oob_error[i] = rf$mse[500]
+  r_squared[i] <- rf$rsq[500] 
+}
+```
+```{r}
+plot(oob_error, , type = "b")
+title("Out-of-Bag Error vs. Number of Vars considered at each node")
+```
+```{r}
+plot(r_squared, type = "b")
+title("R-squared vs. Number of Vars considered at each node")
+```
+<br/>
+New Random Forest Model with mtry = 6:
+```{r}
+set.seed(2)
+
+crime_forest_2 <- randomForest(Crime~., 
+                             data = uscrime,
+                             mtry = 6,
+                             importance = TRUE)
+crime_forest_2
+```
+
+<br/>
+**10.1.b CONCLUSION: The initial random forest model runs 500 trees and auto-selects a mtry value of 5. This yields a model that explains 40.89% of the variability in the data. This is a fairly low. We can also see that error minimization occurs around 100 trees. 500 trees are probably not necessary. This is because the data set we are using is so small- only 47 observation. To imporve the model, we will loop through all values of mtry to see if we can find a better value. We can see that mtry = 6 is the value with the lowest out-of-bag error and highest r-squared, However, if we run a new model at mtry = 6, the percent of variability explained goes down slightly to 39.41%. Low accuracy values make this model not useful for prediction, however, it is useful for assigning variable importance for use in other models.  Po1, Po2, NW, Pop, Wealth, appear to be the most important variables for prediction in this data set.**
+
+## Question 10.2 
+Describe a situation or problem from your job, everyday life, current events, etc., for which a logistic regression model would be appropriate. List some (up to 5) predictors that you might use.
+
+**10.2 RESPONSE: Because the disease process for COVID-19 is still not well understood, using COVID patient characteristics as variables in a logistic regression, where the response is survival/death, would be a meaningful technique for discovering the factors that predispose a patient to death of COVID-19. Such variables might be weight, age, income level, vaccination status, blood-pressure, number of comorbidities, etc.**
+
+
+## Question 10.3 
+  1.Using the GermanCredit data set germancredit.txtfrom http://archive.ics.uci.edu/ml/machine-learning-databases/statlog/german/ (description at http://archive.ics.uci.edu/ml/datasets/Statlog+%28German+Credit+Data%29), use logistic regression to find a good predictive model for whether credit applicants are good credit risks or not.  Show your model (factors used and their coefficients), the software output, and the quality of fit.  You can use the glmfunction in R. To get a logistic regression (logit) model on data where the response is either zero or one, use family=binomial(link=”logit”)in your glmfunction call. 
+  2.Because the model gives a result between 0 and 1, it requires setting a threshold probability to separate between “good” and “bad” answers.In this data set, they estimate that incorrectly identifying a bad customer as good, is 5 times worse than incorrectly classifying a good customer as bad.  Determine a good threshold probability based on your model. 
+```{r}
+library(caret)
+library(pROC)
+library(ResourceSelection)
+```
+Reading in the data and converting response variable to binary:
+```{r}
+germancredit <- read.table("~/Documents/ISYE 6501/germancredit.txt", quote="\"", comment.char="")
+
+germancredit$V21[germancredit$V21==1] <- 0
+germancredit$V21[germancredit$V21==2] <- 1 
+```
+
+## 1. Logistic Regression Model
+
+Spliting train and test sets 80/20:
+```{r}
+set.seed(2)
+trainIndex <- createDataPartition(germancredit$V21, p = .8, 
+                                  list = FALSE, 
+                                  times = 1)
+train <- germancredit[ trainIndex,]
+test  <- germancredit[-trainIndex,]
+```
+
+Initial Logistic Regression Model:
+```{r}
+model <- glm(V21~., 
+             family = binomial(link = "logit"),
+             data = train)
+summary(model)
+```
+Hosmer and Lemeshow Goodness of Fit Test for Logistic Regression Model: 
+```{r}
+hoslem.test(model$y, fitted(model), g=10)
+```
+
+ROC test:
+```{r}
+yhat <- predict(model, test, type = "response")
+
+roc(test$V21, round(yhat)) 
+```
+
+**10.3.1 CONCLUSION: With a p-value of .8659, the Hosmer and Lemeshow goodness of fit test shows that the logistic regression model is useful.  However, when we use the test data to generate a ROC curve, the AOC is only .6373.  This means the model correctly classifies credit risk only slightly better than chance.**
+
+
+## 2. Determining Optimal Threshold Value:
+
+For reference we can interpret the confusion matrix in the following way:
+```{r}
+#         Predicted 0    Predicted 1
+#------------------------------------
+#Actual 0      TP            FN
+#------------------------------------
+#Actual 1      FP            TN
+```
+This data set requires us to consider this cost matrix (0 = Good,  1 = Bad):
+```{r}
+#        0     1
+#-------------------
+#  0     0     1
+#-------------------
+#  1     5     0
+```
+Confusion matrix of predicted response values:
+```{r}
+thresholds <- c(.5,.55,.6,.65,.7,.75,.8,.85,.9,.95)
+
+yhat <- predict(model, train, type = "response")
+
+for (i in thresholds){
+  yhat_thresh <- as.integer((yhat > i))
+  conf_matrix <- as.matrix(table(yhat_thresh, train$V21))
+  print(paste("Threshold = ", i))
+  print(conf_matrix)
+}
+```
+If we consider that falsely classifying a bad as good is 5 times worse, then we would chose .75 or .80 as a threshold value that best minimizes false negatives, but prioritizes minimizing false positives.  
+
+Testing .75 and .8 thresholds on test set:
+```{r}
+yhat <- predict(model, test, type = "response")
+
+yhat_thresh <- as.integer((yhat > .75))
+conf_matrix <- as.matrix(table(yhat_thresh, test$V21))
+print(paste("Threshold = .75"))
+print(conf_matrix)
+
+yhat_thresh <- as.integer((yhat > .8))
+conf_matrix <- as.matrix(table(yhat_thresh, test$V21))
+print(paste("Threshold = .8"))
+print(conf_matrix)
+```
+
+**10.3.2 CONCLUSION: Above we tested the optimal threshold values on the test set. At a threshold of .75, false positives are 10 and, false negatives are 52. If we assign a weight of 5 to the false positives we get a total "score" of the misclassified observations as 102. If we apply this same arithmetic at threshold of .8, we get a total "score" of the misclassifieds of 94.**
+
+Threshold = .75  $(10 * 5)+52=102$ <br/>
+Threshold = .8   $(9 * 5)+54=94$
+
+**So .8 is the best threshold value when we consider the cost matrix.**  
