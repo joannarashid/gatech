@@ -1,0 +1,92 @@
+---
+title: "ISYE_6501_HW4"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+## Question 7.1
+
+Describe a situation or problem from your job, everyday life, current events, etc., for which exponential smoothing would be appropriate. What data would you need? Would you expect the value of  (the first smoothing parameter) to be closer to 0 or 1, and why?
+
+Monitoring ones weight is an ideal application for exponential smoothing.  Body weight fluctuates from day to day. To discern an upward or downward trend in body weight, exponential smoothing can reduce noise. I would expect the alpha value to be closer to 1 meaning that the model would be highly dependent on past observations.
+
+## Question 7.2
+
+Using the 20 years of daily high temperature data for Atlanta (July through October) from Question 6.2 (file temps.txt), build and use an exponential smoothing model to help make a judgment of whether the unofficial end of summer has gotten later over the 20 years.  (Part of the point of this assignment is for you to think about how you might use exponential smoothing to answer this question. Feel free to combine it with other models if you’d like to. There’s certainly more than one reasonable approach.) 
+
+Note: in R, you can use either HoltWinters (simpler to use) or the smooth package’s es function (harder to use, but more general).  If you use es, the Holt-Winters model uses model=”AAM” in the function call (the first and second constants are used “A”dditively, and the third (seasonality) is used “Multiplicatively; the documentation doesn’t make that clear). 
+
+Reading in the data and converting to time series object:
+```{r}
+temp_df <- read.table('temps.txt', stringsAsFactors = FALSE, header = TRUE)
+
+temp_v <- as.vector(unlist(temp_df[,2:21]))
+temp_ts <- ts(temp_v, start = 199, frequency = 123)
+```
+
+Plotting the data and decomposition of time-series:
+```{r}
+plot.ts(temp_ts) #simple plot
+plot(decompose(temp_ts)) #trend, season, and randomness
+```
+Upon visual inspection, we can see that this data has distinct seasonality.  The data is very noisy and does not have a strongly discernible trend.
+```{r}
+library(forecast)
+
+model_hwa <- HoltWinters(temp_ts, alpha = NULL, beta = NULL, gamma = NULL, seasonal = "additive")
+
+print("Holt Winters Model: Additive") 
+print(paste("SSE:   ", model_hwa$SSE))
+print(paste("Alpha: ", model_hwa$alpha))
+print(paste("Beta:  ", model_hwa$beta))
+print(paste("Gamma: ", model_hwa$gamma))
+
+model_hwm <- HoltWinters(temp_ts, alpha = NULL, beta = NULL, gamma = NULL, seasonal = "multiplicative")
+
+print("Holt Winters Model: Multiplicative") 
+print(paste("SSE:   ", model_hwm$SSE))
+print(paste("Alpha: ", model_hwm$alpha))
+print(paste("Beta:  ", model_hwm$beta))
+print(paste("Gamma: ", model_hwm$gamma))
+```
+The additive model yeilds a better SSE.  The value of alpha is slightly higher.  At .661, the value of alpha shows the weight on previous period to be somewhat high.
+```{r}
+plot(model_hwa, main = "Holt_Winters Additive", sub = "Atlanta Summer & Fall Temps 1996-2015")
+plot(model_hwm, main = "Holt_Winters Multiplicative", sub = "Atlanta Summer & Fall Temps 1996-2015")
+```
+Indeed the additive model produces a slightly more smooth model as compared to the multiplicative model as illustrated in the fitted versus observed timeseries graph above.
+```{r}
+plot(model_hwa$fitted, main = "Holt_Winters Additive", sub = "Atlanta Summer & Fall Temps 1996-2015")
+
+plot(model_hwm$fitted, main = "Holt_Winters Multiplicative", sub = "Atlanta Summer & Fall Temps 1996-2015")
+```
+```{r}
+mean(model_hwm$fitted[,3])
+mean(model_hwa$fitted[,3])
+```
+In both the multiplicative model and the additive Holt-Winters model, the trend is -0.004362918, nearly 0.
+
+Exporting fitted values to csv for CUSUM analysis in excel:
+```{r}
+temp_fitted <- matrix(model_hwa$fitted[,1], nrow = 123)
+
+write.csv(temp_fitted, file = 'temp_fitted.csv', fileEncoding = 'UTF-16LE')
+```
+
+Exporting seasonal fitted values to csv for CUSUM analysis in excel:
+```{r}
+temp_seasonal <- matrix(model_hwa$fitted[,4], nrow = 123)
+
+write.csv(temp_seasonal, file = 'temp_seasonal.csv', fileEncoding = 'UTF-16LE')
+```
+
+**CONCLUSION** 
+
+See additional Excel file for CUSUM analysis on various values of C and T.
+
+From the analysis above we can conclude the Holt-Winters Additive model is the best model for this time-series data. The fitted values and seasonally fitted values from this model were both exported to excel for CUSUM analysis. If we perform CUSUM analysis using .5x standard deviation for C and 5x standard deviation for T (C = 3.5 and T = 33), change from summer to fall is detected on September 22. If we perform CUSUM on the seasonal values with the same C and threshold value, we get a similar result with change detected on September 23. 
+
+To address the second question of if summers are getting hotter in Atlanta, I performed a CUSUM analysis on the mean annual values from the the fitted values produced by the Holt-Winters additive model. The graph of the values closely resembles that of the observed data. While hotter summers did occur in some years, none broke the threshold value of 5x standard deviation (8.12). So the conclusion of the CUSUM analysis using fitted values from the Holt-Winters model is the same as with the raw data- this data does not suggest summers are significantly hotter.
+
