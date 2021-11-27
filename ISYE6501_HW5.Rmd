@@ -1,0 +1,202 @@
+---
+title: "ISYE6501_HW5"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Question 8.2
+
+Using crime data from http://www.statsci.org/data/general/uscrime.txt  (file uscrime.txt, description at http://www.statsci.org/data/general/uscrime.html ), use regression (a useful R function is lm or glm) to predict the observed crime rate in a city with the following data:
+
+* M = 14.0
+* So = 0
+* Ed = 10.0
+* Po1 = 12.0
+* Po2 = 15.5
+* LF = 0.640
+* M.F = 94.0
+* Pop = 150
+* NW = 1.1
+* U1 = 0.120
+* U2 = 3.6
+* Wealth = 3200
+* Ineq = 20.1
+* Prob = 0.04
+* Time = 39.0
+
+Show your model (factors used and their coefficients), the software output, and the quality of fit. 
+
+Note that because there are only 47 data points and 15 predictors, you’ll probably notice some overfitting.  We’ll see ways of dealing with this sort of problem later in the course.
+
+Reading in the data:
+```{r}
+uscrime <- read.delim("~/Documents/ISYE 6501/hw5-Fall 21/uscrime.txt")
+```
+
+```{r}
+library("Hmisc")
+library(corrplot)
+```
+
+# Correlation Matrix:
+```{r}
+uscrime.cor = cor(uscrime)
+corrplot(uscrime.cor)
+```
+This simple correlation matrix shows that 'Po1' and 'Po2' are highly correlated with Crime, but also with one another suggesting that only one should be included in the model.  'Po1' and 'Po2' appear to be highly correlated with 'Ed,' 'Wealth,' and 'Pop' and inversely correlated with 'Ineg' and "M.'  This suggest that likely only one or tow of these variables should be included in a useful model.
+
+# Coefficient Correlation Matrix with p-Values:
+```{r}
+rcorr(as.matrix(uscrime))
+```
+If we can look at the last line, 'Crime,' in the above p-value chart we can see which coefficients are not statistically significant (ie. 'M', 'S,' 'LF,' 'M.F,' 'NM,' 'U1,' 'U2,' 'Ineq', and 'Time')  We cannot rule these out on correlation coefficients and p-values alone, so we must do further analysis for variable selection.
+
+# Initial Linear Model (including all variables):
+```{r}
+lm_1 <- lm(Crime~., data=uscrime)
+summary(lm_1)
+```
+This model has an adjusted r-squared of .7078 with a very low p-value.  However, many of the coefficients are not statistically significant. Variable reduction is needed.
+
+Diagnostics on lm_1:
+```{r}
+plot(lm_1)
+```
+```{r}
+hist(lm_1$residuals)
+```
+Exploration of the initial linear model suggests this data meets all of the assumptions for linear regression.  No heteroskedasticity is  detected.
+
+```{r}
+library(car)
+```
+# Variance Inflation Factors for Model 1:
+Values exceeding 4 suggest at least some multicollinearity and values over 10 are considered problematic. https://online.stat.psu.edu/stat462/node/180/
+```{r}
+vif(lm_1)
+```
+Here we can see that many variables are greater than 4. There is definitely some multicollinearity. This model will definitely need further analysis for feature reduction.  Since so many variables have values greater than 4, we will use leaps to help select variables for the model.
+
+
+# Variable Selection Using Leaps:
+Leaps essentially ranks variables for inclusion in a useful model and determine which of the models has the highest r-squared and lowest BIC.  https://www.rdocumentation.org/packages/leaps/versions/3.1/topics/leaps:
+
+```{r}
+library(leaps)
+```
+
+```{r}
+models <- regsubsets(Crime~.,
+               data = uscrime,
+               nbest = 1,      # 1 best model for each number of predictors
+               nvmax = NULL,    # NULL for no limit on number of variables
+               force.in = NULL, 
+               force.out = NULL,
+               method = "exhaustive")
+
+summary_best_subset <- summary(models)
+as.data.frame(summary_best_subset$outmat)
+```
+It looks like Po1, Ed, M, Prob, U2, and so on per the above chart are the most important variables respectively.
+
+Using leaps to assess the model with the highest r-square and with the lowest BIC:
+```{r}
+res.sum <- summary(models)
+
+print(paste("Model with highest Adjusted R-squared: ", which.max(res.sum$adjr2)))
+print(paste("Model with lowest BIC:", which.min(res.sum$bic)))
+```
+So the 8-variable model gives us the best r-squared and the 6-variable model gives us the best BIC.  
+
+# Additional Linear Models with Reduced Variables:
+
+Creating new model with variables selected by leaps:
+```{r}
+lm_2 <- lm(Crime~ M + Ed + Po1 + U2 + Ineq + Prob, data = uscrime) #6 variable model with vars selected form leaps output
+summary(lm_2)
+
+lm_3 <- lm(Crime~ M + Ed + Po1 + M.F + U1 + U2 + Ineq +Prob, data = uscrime) #8 variable model with vars selected form leaps output
+summary(lm_2)
+```
+Both models produce higher r-squared values with low p-values. In both of these models, the coefficients are all statistically significant at 95% of higher confidence.
+
+# Variance Inflation Factors for Models 2 and 3:
+```{r}
+print("Model 2 VIF")
+vif(lm_2)
+print("Model 3 VIF")
+vif(lm_3)
+```
+We can see that in model 2 no variables are above the unofficial threshold of 4, suggesting all the variables are independent from one another. Overall, the variables in model 2 have lower VIF values than in model 3 suggesting it is a better model from the standpoint of avoiding multicollinearity. However, more assessment is needed to choose the best model.
+
+## Model Assesment and Prediction of Test Value:
+```{r}
+accuracy_df <-data.frame(matrix(ncol = 6, nrow = 0)) #empty dataframe
+
+colnames(accuracy_df) <- c('model',                  #df col names
+                           '# of Vars',
+                           'R-squared',
+                           'AIC',
+                           'BIC',
+                           'Predicted Test Response')
+
+#creating test point for predicted values
+test_point <- data.frame(M = 14.0,So = 0,Ed = 10.0, Po1 = 12.0,Po2 = 15.5,
+                         LF = 0.640, M.F = 94.0,Pop = 150,NW = 1.1,U1 = 0.120,
+                         U2 = 3.6, Wealth = 3200,Ineq = 20.1,Prob = 0.04, Time = 39.0)
+
+accuracy_df[nrow(accuracy_df) + 1,] = c('model 1',
+                                        13,
+                                        summary(lm_1)$adj.r.squared,
+                                        AIC(lm_1),
+                                        BIC(lm_1),
+                                        predict(lm_1, test_point))
+
+accuracy_df[nrow(accuracy_df) + 1,] = c('model 2',
+                                        6,
+                                        summary(lm_2)$adj.r.squared,
+                                        AIC(lm_2),
+                                        BIC(lm_2),
+                                        predict(lm_2, test_point))
+
+accuracy_df[nrow(accuracy_df) + 1,] = c('model 3',
+                                        8,
+                                        summary(lm_3)$adj.r.squared,
+                                        AIC(lm_3),
+                                        BIC(lm_3),
+                                        predict(lm_3, test_point))
+accuracy_df
+
+```
+The data above suggests that either model 2 or 3 are best.  Model 2 has the lowest BIC.  Model 3 has the highest r-squared and the lowest AIC.  Their predicted response values for the test set are within roughly 300 points of one another.  Model 1 is clearly the least useful model.
+
+```{r}
+print('Model 2 test point prediction')
+predict(lm_2, test_point, interval = 'confidence')
+
+print('Model 3 test point prediction')
+predict(lm_3, test_point, interval = 'confidence')
+```
+
+The 95% confidence interval for model 2 is much narrower than for model 3, suggesting that the prediction of model 2 is more precise.  Thereby it is model 2 from this analysis that is the best model.
+
+## Solution:
+
+$Crime = -5040.50 + 105.02M + 196.47Ed + 115.02Po1 + 89.37U2 +67.65Ineq -3801.84Prob + \epsilon$
+
+For this model the response variable is 'Crime' which is the number of offenses per 100,000 population in the USA in 1960.  The explanatory variable that are used in this model are:
+
+* M		  percentage of males aged 14–24 in total state population
+* Ed		mean years of schooling of the population aged 25 years or over
+* Po1		per capita expenditure on police protection in 1960
+* U2		unemployment rate of urban males 35–39
+* Ineq	income inequality: percentage of families earning below half the median income
+* Prob	probability of imprisonment: ratio of number of commitments to number of offenses
+
+**With this model, the predicted crime rate for the test point is 1304.245 per 100,000 people in the population at a 95% level of confidence.** 
+
+At a 95% level of significance, the number of men in a population, level of income inequality, unemployment rate of men, and education level all have a marginally positive relationship with crime. Interestingly, police funding has a positive relationship with crime suggesting more policing (at least marginally) equals more crime. Probability of imprisonment has a negative relationship with crime suggesting that increased convictions serves as a deterrent.
+
