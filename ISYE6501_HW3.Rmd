@@ -1,0 +1,63 @@
+---
+title: "ISYE6501_HW3"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+##Question 5.1
+
+Using crime data from the file uscrime.txt (http://www.statsci.org/data/general/uscrime.txt, description at http://www.statsci.org/data/general/uscrime.html), test to see whether there are any outliers in the last column (number of crimes per 100,000 people).  Use the grubbs.test function in the outliers package in R.
+
+```{r cars}
+df <- read.table("http://www.statsci.org/data/general/uscrime.txt", 
+                 header = TRUE)
+```
+
+```{r}
+library(ggplot2)
+
+ggplot(df, aes(Crime))+
+  geom_boxplot()+
+  labs(title="Boxplot Crime")
+```
+
+
+```{r}
+ggplot(df, aes(Crime, Time))+
+  geom_line()+
+  labs(title="Crime Timeseries")
+```
+
+```{r}
+library(outliers)
+
+grubbs.test(df$Crime, type = 10)
+```
+We can see from the boxplot, and line plot above that 1993 is indeed an outlier as identified by the grubbs test.  While the p-value (which is greatrer than .05) suggests there is evidence for the null hypothesis that 1993 is not an outlier.  Visual inspection of the EDA suggests otherwise.
+
+Line plot excluding Crime = 1993
+```{r}
+df2 <- df[-26, ]
+ggplot(df2, aes(Time, Crime))+
+  geom_line()+
+  labs(title="Crime Timeseries")
+```
+
+```{r}
+grubbs.test(df2$Crime, type=10)
+```
+
+It looks as though, there is still an outlier (Crime = 1969).  With a p-value under .05, we can say with approx 98% significance that this is an outlier.
+
+Line plot excluding Crime = 1993
+```{r}
+df3 <- df[-4, ]
+ggplot(df3, aes(Time, Crime))+
+  geom_line()+
+  labs(title="Crime Timeseries")
+```
+We can see that each time we remove an outlier and re-plot the remaining values, it appears though there is yet another outlier to eliminate.  Ultimately, The grubbs test and box plot should probably not be used alone to identify outliers.  Additional analysis should include time series regression with and without outliers in order to compare R-square, variance, and residual vs. fitted values to determine if removing outliers improves model fit.  Also an analog analysis of outliers is import in order to rule out erroneous data or anomaly events not worth modeling.
+
